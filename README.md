@@ -54,7 +54,7 @@ terraform-aws-s3-cloudfront-static-site/
 ### 2. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/terraform-aws-s3-cloudfront-static-site.git
+git clone https://github.com/bigmanabel/terraform-aws-s3-cloudfront-static-site.git
 cd terraform-aws-s3-cloudfront-static-site
 ```
 
