@@ -9,6 +9,6 @@ variable "domain_name" {
 }
 
 variable "project_name" {
-  type        = string
-  default     = "s3-static-site"
+  type    = string
+  default = "s3-static-site"
 }
