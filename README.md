@@ -1,15 +1,18 @@
 # 🌐 Terraform AWS S3 + CloudFront Static Website
 
-A secure, scalable, and globally distributed **static website hosting solution** built on AWS using Terraform.
+A secure, scalable, and globally distributed **static website hosting solution**
+built on AWS using Terraform.
 
 This project provisions:
 
-- An S3 bucket configured for static website hosting
-- A CloudFront distribution for global content delivery
-- An ACM certificate for HTTPS
-- DNS validation and Route 53 configuration
-- AWS WAF (Web ACL) for basic protection
-- Automated upload of site files (`index.html`) to S3
+- An S3 bucket configured for static website hosting with modern security
+  controls
+- A CloudFront distribution for global content delivery with optimized caching
+- An ACM certificate for HTTPS with automatic DNS validation
+- Route 53 DNS configuration for custom domain
+- AWS WAF (Web ACL) for basic security protection
+- Automated upload of site files from `build/` directory to S3
+- Modern Terraform configuration following AWS provider v5 best practices
 
 ---
 
@@ -32,7 +35,7 @@ terraform-aws-s3-cloudfront-static-site/
 ├── variables.tf
 ├── outputs.tf
 ├── terraform.tfvars
-├── static-site/                  # Your static website content
+├── build/                        # Your static website content
 │   └── index.html
 └── modules/
     └── s3-static-site/
@@ -63,16 +66,18 @@ cd terraform-aws-s3-cloudfront-static-site
 Edit `terraform.tfvars`:
 
 ```hcl
-region      = "us-east-1"
-project     = "s3-static-site"
-domain_name = "yourdomain.com"
+aws_region   = "us-east-1"
+project_name = "your-project-name"
+domain_name  = "yourdomain.com"
 ```
 
-> Your domain must already be registered in Route 53 for DNS validation to succeed.
+> Your domain must already be registered in Route 53 for DNS validation to
+> succeed.
 
 ### 4. Configure AWS Environment Variables (Optional)
 
-You can source your AWS credentials from an environment file instead of using `aws configure`.
+You can source your AWS credentials from an environment file instead of using
+`aws configure`.
 
 Create a `.env` file:
 
@@ -107,32 +112,42 @@ terraform apply
 ```
 
 Terraform will:
-- Create the S3 bucket
-- Provision CloudFront + WAF + ACM
-- Setup Route 53 alias + cert validation
-- Automatically upload `static-site/index.html` to S3
+
+- Create the S3 bucket with modern security configurations
+- Provision CloudFront distribution with AWS managed cache policies
+- Setup ACM certificate with automatic DNS validation
+- Configure WAF with AWS managed rules for basic protection
+- Create Route 53 alias records for your domain
+- Automatically upload files from `build/` directory to S3
 
 ---
 
 ## 📤 Outputs
 
-| Output              | Description                             |
-|---------------------|-----------------------------------------|
-| `s3_bucket_name`    | Name of the S3 bucket                   |
-| `cloudfront_domain` | CloudFront domain URL                   |
-| `website_url`       | Full domain (e.g. https://yourdomain.com) |
-| `waf_web_acl_arn`   | ARN of the WAF Web ACL                  |
+| Output                | Description                                 |
+| --------------------- | ------------------------------------------- |
+| `s3_bucket_name`      | Name of the S3 bucket                       |
+| `cloudfront_domain`   | CloudFront domain URL                       |
+| `website_url`         | Full domain (e.g. `https://yourdomain.com`) |
+| `waf_web_acl_arn`     | ARN of the WAF Web ACL                      |
+| `acm_certificate_arn` | ARN of the ACM certificate                  |
 
 ---
 
 ## 📌 Notes
 
-- ACM must be in `us-east-1` for CloudFront to use it.
-- The WAF includes a basic AWS managed ruleset.
-- You can replace the content in `static-site/` with your actual website files.
+- ACM certificate must be provisioned in `us-east-1` region for CloudFront
+  compatibility
+- The WAF includes AWS managed Common Rule Set for basic protection
+- Website files should be placed in the `build/` directory for automatic
+  deployment
+- The configuration follows modern AWS provider v5 practices with separate
+  resources for S3 bucket configurations
+- CloudFront uses AWS managed cache policies for optimal performance
 
 ---
 
 ## 🧠 Inspiration
 
-This project follows AWS best practices and is part of a portfolio series demonstrating real-world infrastructure automation using Terraform.
+This project follows AWS best practices and is part of a portfolio series
+demonstrating real-world infrastructure automation using Terraform.
