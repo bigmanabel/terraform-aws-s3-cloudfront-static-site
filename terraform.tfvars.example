@@ -1,3 +1,3 @@
-aws_region   =
-project_name =
-domain_name  =
+aws_region   = "us-east-1"
+project_name = "example-static-site"
+domain_name  = "example.com"

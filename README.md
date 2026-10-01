@@ -1,153 +1,112 @@
-# 🌐 Terraform AWS S3 + CloudFront Static Website
+# Terraform AWS Static Site Delivery
 
-A secure, scalable, and globally distributed **static website hosting solution**
-built on AWS using Terraform.
+[![Terraform](https://img.shields.io/badge/Terraform-1.7%2B-623CE4?logo=terraform&logoColor=white)](https://developer.hashicorp.com/terraform)
+[![AWS Provider](https://img.shields.io/badge/AWS_Provider-5.x-FF9900?logo=amazonaws&logoColor=white)](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 
-This project provisions:
+A Terraform reference implementation for publishing a custom-domain static
+website through Amazon CloudFront. It demonstrates the infrastructure pieces a
+small marketing site or documentation portal needs: HTTPS, DNS validation,
+edge caching, and baseline web protection.
 
-- An S3 bucket configured for static website hosting with modern security
-  controls
-- A CloudFront distribution for global content delivery with optimized caching
-- An ACM certificate for HTTPS with automatic DNS validation
-- Route 53 DNS configuration for custom domain
-- AWS WAF (Web ACL) for basic security protection
-- Automated upload of site files from `build/` directory to S3
-- Modern Terraform configuration following AWS provider v5 best practices
+Part of [Abel Nutsugah’s AWS infrastructure portfolio](https://github.com/bigmanabel).
 
----
+## Use case
 
-<!-- ## 🗺️ Architecture Diagram -->
-<!--  -->
-<!-- **Title:** *Static Website Hosting on AWS with S3, CloudFront, WAF, and Route 53* -->
-<!--  -->
-<!-- ![Architecture Diagram](./diagrams/static-site-architecture.png) -->
-<!--  -->
-<!-- > The diagram includes S3 for hosting, CloudFront for global access and TLS, ACM for HTTPS, WAF for protection, and Route 53 for DNS. -->
-<!--  -->
-<!-- --- -->
+Use this project as a starting point when a static frontend needs a global URL,
+a custom domain, and an infrastructure-as-code deployment path. Place built
+site assets in `build/`, then Terraform provisions and synchronizes the
+delivery stack.
 
-## 🧱 Project Structure
+## Architecture
 
-```bash
-terraform-aws-s3-cloudfront-static-site/
-├── main.tf
-├── provider.tf
-├── variables.tf
-├── outputs.tf
-├── terraform.tfvars
-├── build/                        # Your static website content
-│   └── index.html
-└── modules/
-    └── s3-static-site/
-        ├── main.tf
-        ├── variables.tf
-        └── outputs.tf
+```mermaid
+flowchart LR
+    Visitor[Site visitor] -->|HTTPS| CF[CloudFront distribution]
+    CF -->|HTTP origin| S3[S3 static website endpoint]
+    CF --> WAF[AWS WAF managed rules]
+    DNS[Route 53 hosted zone] --> CF
+    ACM[ACM certificate] --> CF
+    TF[Terraform] --> S3
 ```
 
----
+## What Terraform creates
 
-## 🛠 Setup Instructions
+- S3 bucket and static-website configuration for the site assets
+- CloudFront distribution with compression and AWS-managed cache policy
+- ACM certificate and Route 53 DNS validation records
+- Route 53 alias record for the custom domain
+- AWS WAF web ACL using the AWS managed Common Rule Set
+- A local sync step that uploads `build/` to the S3 bucket
 
-### 1. Prerequisites
+## Prerequisites
 
-- [Terraform](https://developer.hashicorp.com/terraform/downloads)
-- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html)
-- AWS credentials configured (`aws configure`)
+- Terraform `~> 1.7`
+- AWS CLI authenticated with a profile, AWS IAM Identity Center, or environment
+  credentials
+- A public Route 53 hosted zone for the exact `domain_name`
+- Static site files in `build/`
 
-### 2. Clone the Repository
+> **Region requirement:** CloudFront certificates and CloudFront-scope WAF
+> resources must be created in `us-east-1`. Run this implementation in that
+> region until the provider-alias hardening work is added.
+
+## Configure and validate
+
+Copy the example, then replace the placeholders with your values:
 
 ```bash
-git clone https://github.com/bigmanabel/terraform-aws-s3-cloudfront-static-site.git
-cd terraform-aws-s3-cloudfront-static-site
+cp terraform.tfvars.example terraform.tfvars
+terraform fmt -check -recursive
+terraform init
+terraform validate
+terraform plan
 ```
-
-### 3. Update Variables
-
-Edit `terraform.tfvars`:
 
 ```hcl
 aws_region   = "us-east-1"
-project_name = "your-project-name"
-domain_name  = "yourdomain.com"
+project_name = "example-marketing-site"
+domain_name  = "example.com"
 ```
 
-> Your domain must already be registered in Route 53 for DNS validation to
-> succeed.
-
-### 4. Configure AWS Environment Variables (Optional)
-
-You can source your AWS credentials from an environment file instead of using
-`aws configure`.
-
-Create a `.env` file:
+Apply only after reviewing the plan:
 
 ```bash
-touch .env
-```
-
-Add your credentials:
-
-```env
-export AWS_ACCESS_KEY_ID=your-access-key-id
-export AWS_SECRET_ACCESS_KEY=your-secret-access-key
-export AWS_DEFAULT_REGION=us-east-1
-```
-
-Then source the file in your shell:
-
-```bash
-source .env
-```
-
-This method is useful for scripting, automation, or managing multiple profiles.
-
----
-
-## 🚀 Deploy the Stack
-
-```bash
-terraform init
-terraform plan
 terraform apply
 ```
 
-Terraform will:
+Useful outputs include the S3 bucket name, CloudFront domain, custom website
+URL, ACM certificate ARN, and WAF ARN.
 
-- Create the S3 bucket with modern security configurations
-- Provision CloudFront distribution with AWS managed cache policies
-- Setup ACM certificate with automatic DNS validation
-- Configure WAF with AWS managed rules for basic protection
-- Create Route 53 alias records for your domain
-- Automatically upload files from `build/` directory to S3
+## Operational notes
 
----
+- CloudFront, WAF, Route 53, and S3 can incur charges. Review the plan and
+  current AWS pricing before applying or leaving the stack running.
+- The asset sync runs with `aws s3 sync --delete`; removing a file from
+  `build/` removes its matching object from the deployment bucket on the next
+  apply.
+- Terraform state can contain infrastructure details. Keep state in a secured
+  remote backend for team or long-lived environments, and never commit local
+  state or `terraform.tfvars` files.
 
-## 📤 Outputs
+## Current implementation boundary
 
-| Output                | Description                                 |
-| --------------------- | ------------------------------------------- |
-| `s3_bucket_name`      | Name of the S3 bucket                       |
-| `cloudfront_domain`   | CloudFront domain URL                       |
-| `website_url`         | Full domain (e.g. `https://yourdomain.com`) |
-| `waf_web_acl_arn`     | ARN of the WAF Web ACL                      |
-| `acm_certificate_arn` | ARN of the ACM certificate                  |
+This repository intentionally documents the implementation as it exists. The
+S3 website endpoint is publicly readable so CloudFront can use it as a custom
+origin. For a client production deployment, the recommended follow-up is a
+private S3 bucket with CloudFront Origin Access Control, an S3 REST origin, and
+explicit provider aliases for the CloudFront certificate and WAF resources.
 
----
+## Project layout
 
-## 📌 Notes
+```text
+├── build/                       # Static site assets to upload
+├── main.tf                      # Root module
+├── provider.tf                  # Terraform and AWS provider requirements
+├── terraform.tfvars.example     # Safe configuration template
+└── modules/s3-static-site/      # S3, CloudFront, ACM, Route 53, and WAF
+```
 
-- ACM certificate must be provisioned in `us-east-1` region for CloudFront
-  compatibility
-- The WAF includes AWS managed Common Rule Set for basic protection
-- Website files should be placed in the `build/` directory for automatic
-  deployment
-- The configuration follows modern AWS provider v5 practices with separate
-  resources for S3 bucket configurations
-- CloudFront uses AWS managed cache policies for optimal performance
+## Cleanup
 
----
-
-## 🧠 Inspiration
-
-This project follows AWS best practices and is part of a portfolio series
-demonstrating real-world infrastructure automation using Terraform.
+Run `terraform destroy` only after confirming the target AWS account and
+workspace. This removes the delivery resources and the deployed site assets.
