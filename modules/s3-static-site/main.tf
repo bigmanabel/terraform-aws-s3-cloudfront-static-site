@@ -6,60 +6,53 @@ resource "aws_s3_bucket" "site" {
   }
 }
 
-resource "aws_s3_bucket_acl" "site" {
-  depends_on = [aws_s3_bucket_ownership_controls.site]
-  bucket     = aws_s3_bucket.site.id
-  acl        = "public-read"
-}
-
 resource "aws_s3_bucket_ownership_controls" "site" {
   bucket = aws_s3_bucket.site.id
 
   rule {
-    object_ownership = "BucketOwnerPreferred"
+    object_ownership = "BucketOwnerEnforced"
   }
 }
 
 resource "aws_s3_bucket_public_access_block" "site" {
   bucket = aws_s3_bucket.site.id
 
-  block_public_acls       = false
-  block_public_policy     = false
-  ignore_public_acls      = false
-  restrict_public_buckets = false
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
 
-resource "aws_s3_bucket_website_configuration" "site" {
+resource "aws_s3_bucket_server_side_encryption_configuration" "site" {
   bucket = aws_s3_bucket.site.id
 
-  index_document {
-    suffix = "index.html"
-  }
-
-  error_document {
-    key = "index.html"
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
   }
 }
 
-resource "aws_s3_bucket_policy" "public_read" {
+resource "aws_s3_bucket_versioning" "site" {
   bucket = aws_s3_bucket.site.id
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect    = "Allow",
-        Principal = "*",
-        Action    = "s3:GetObject",
-        Resource  = "${aws_s3_bucket.site.arn}/*"
-      }
-    ]
-  })
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_cloudfront_origin_access_control" "site" {
+  name                              = "${var.project_name}-s3-oac"
+  description                       = "CloudFront access control for ${var.domain_name}"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
 }
 
 resource "aws_acm_certificate" "cert" {
+  provider          = aws.us_east_1
   domain_name       = var.domain_name
   validation_method = "DNS"
-  provider          = aws
 
   lifecycle {
     create_before_destroy = true
@@ -73,19 +66,14 @@ data "aws_cloudfront_cache_policy" "optimized" {
 
 resource "aws_cloudfront_distribution" "cdn" {
   enabled             = true
+  aliases             = [var.domain_name]
   default_root_object = "index.html"
   web_acl_id          = aws_wafv2_web_acl.site_waf.arn
 
   origin {
-    domain_name = aws_s3_bucket_website_configuration.site.website_endpoint
-    origin_id   = "s3-origin"
-
-    custom_origin_config {
-      http_port              = 80
-      https_port             = 443
-      origin_protocol_policy = "http-only"
-      origin_ssl_protocols   = ["TLSv1.2"]
-    }
+    domain_name              = aws_s3_bucket.site.bucket_regional_domain_name
+    origin_id                = "s3-origin"
+    origin_access_control_id = aws_cloudfront_origin_access_control.site.id
   }
 
   default_cache_behavior {
@@ -95,7 +83,6 @@ resource "aws_cloudfront_distribution" "cdn" {
     allowed_methods = ["GET", "HEAD"]
     cached_methods  = ["GET", "HEAD"]
 
-    # Use AWS managed cache policy instead of deprecated forwarded_values
     cache_policy_id = data.aws_cloudfront_cache_policy.optimized.id
     compress        = true
   }
@@ -115,6 +102,28 @@ resource "aws_cloudfront_distribution" "cdn" {
   tags = {
     Name = "${var.project_name}-cdn"
   }
+}
+
+resource "aws_s3_bucket_policy" "cloudfront_read" {
+  bucket = aws_s3_bucket.site.id
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          Service = "cloudfront.amazonaws.com"
+        },
+        Action   = "s3:GetObject",
+        Resource = "${aws_s3_bucket.site.arn}/*",
+        Condition = {
+          StringEquals = {
+            "AWS:SourceArn" = aws_cloudfront_distribution.cdn.arn
+          }
+        }
+      }
+    ]
+  })
 }
 
 data "aws_route53_zone" "primary" {
@@ -139,6 +148,7 @@ resource "aws_route53_record" "cert_validation" {
 }
 
 resource "aws_acm_certificate_validation" "cert" {
+  provider                = aws.us_east_1
   certificate_arn         = aws_acm_certificate.cert.arn
   validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
 }
@@ -156,6 +166,7 @@ resource "aws_route53_record" "www" {
 }
 
 resource "aws_wafv2_web_acl" "site_waf" {
+  provider    = aws.us_east_1
   name        = "${var.project_name}-waf"
   description = "WAF for static site CloudFront"
   scope       = "CLOUDFRONT"
@@ -205,4 +216,10 @@ resource "null_resource" "upload_site_content" {
     bucket_name  = aws_s3_bucket.site.id
     content_hash = sha256(join("", [for f in fileset("../../build", "**") : filesha256("../../build/${f}")]))
   }
+
+  depends_on = [
+    aws_s3_bucket_policy.cloudfront_read,
+    aws_s3_bucket_server_side_encryption_configuration.site,
+    aws_s3_bucket_versioning.site,
+  ]
 }

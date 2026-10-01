@@ -22,7 +22,8 @@ delivery stack.
 ```mermaid
 flowchart LR
     Visitor[Site visitor] -->|HTTPS| CF[CloudFront distribution]
-    CF -->|HTTP origin| S3[S3 static website endpoint]
+    CF -->|Signed origin request| OAC[CloudFront Origin Access Control]
+    OAC --> S3[Private S3 bucket]
     CF --> WAF[AWS WAF managed rules]
     DNS[Route 53 hosted zone] --> CF
     ACM[ACM certificate] --> CF
@@ -31,7 +32,8 @@ flowchart LR
 
 ## What Terraform creates
 
-- S3 bucket and static-website configuration for the site assets
+- Private S3 bucket with versioning, server-side encryption, and public access
+  blocks for the site assets
 - CloudFront distribution with compression and AWS-managed cache policy
 - ACM certificate and Route 53 DNS validation records
 - Route 53 alias record for the custom domain
@@ -47,8 +49,8 @@ flowchart LR
 - Static site files in `build/`
 
 > **Region requirement:** CloudFront certificates and CloudFront-scope WAF
-> resources must be created in `us-east-1`. Run this implementation in that
-> region until the provider-alias hardening work is added.
+> resources are created through an explicit `us-east-1` provider alias. The S3
+> bucket may use the configured `aws_region`.
 
 ## Configure and validate
 
@@ -88,13 +90,19 @@ URL, ACM certificate ARN, and WAF ARN.
   remote backend for team or long-lived environments, and never commit local
   state or `terraform.tfvars` files.
 
-## Current implementation boundary
+## Security controls
 
-This repository intentionally documents the implementation as it exists. The
-S3 website endpoint is publicly readable so CloudFront can use it as a custom
-origin. For a client production deployment, the recommended follow-up is a
-private S3 bucket with CloudFront Origin Access Control, an S3 REST origin, and
-explicit provider aliases for the CloudFront certificate and WAF resources.
+- S3 Block Public Access is enabled and bucket ownership enforcement disables
+  ACL-based access.
+- CloudFront accesses the S3 REST origin through Origin Access Control; the
+  bucket policy permits reads only from this distribution.
+- The CloudFront distribution includes the configured custom domain as an
+  alternate domain name and uses the validated ACM certificate.
+- The WAF uses the AWS managed Common Rule Set at the CloudFront scope.
+
+When applying this change to an existing deployment, review the Terraform plan
+carefully: it migrates the origin from a public S3 website endpoint to a private
+S3 REST origin and updates the distribution configuration.
 
 ## Project layout
 
