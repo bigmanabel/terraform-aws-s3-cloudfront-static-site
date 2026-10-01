@@ -41,6 +41,39 @@ resource "aws_s3_bucket_versioning" "site" {
   }
 }
 
+locals {
+  mime_types = {
+    css   = "text/css"
+    gif   = "image/gif"
+    html  = "text/html"
+    ico   = "image/x-icon"
+    jpeg  = "image/jpeg"
+    jpg   = "image/jpeg"
+    js    = "application/javascript"
+    json  = "application/json"
+    map   = "application/json"
+    png   = "image/png"
+    svg   = "image/svg+xml"
+    txt   = "text/plain"
+    webp  = "image/webp"
+    woff  = "font/woff"
+    woff2 = "font/woff2"
+  }
+
+  site_files = fileset(var.site_files_path, "**")
+}
+
+resource "aws_s3_object" "site_file" {
+  for_each = local.site_files
+
+  bucket        = aws_s3_bucket.site.id
+  key           = each.value
+  source        = "${var.site_files_path}/${each.value}"
+  etag          = filemd5("${var.site_files_path}/${each.value}")
+  content_type  = lookup(local.mime_types, lower(element(reverse(split(".", each.value)), 0)), "application/octet-stream")
+  cache_control = startswith(each.value, "assets/") ? "public, max-age=31536000, immutable" : "no-cache"
+}
+
 resource "aws_cloudfront_origin_access_control" "site" {
   name                              = "${var.project_name}-s3-oac"
   description                       = "CloudFront access control for ${var.domain_name}"
@@ -205,21 +238,4 @@ resource "aws_wafv2_web_acl" "site_waf" {
   tags = {
     Name = "${var.project_name}-waf"
   }
-}
-
-resource "null_resource" "upload_site_content" {
-  provisioner "local-exec" {
-    command = "aws s3 sync ../../build s3://${aws_s3_bucket.site.id} --delete"
-  }
-
-  triggers = {
-    bucket_name  = aws_s3_bucket.site.id
-    content_hash = sha256(join("", [for f in fileset("../../build", "**") : filesha256("../../build/${f}")]))
-  }
-
-  depends_on = [
-    aws_s3_bucket_policy.cloudfront_read,
-    aws_s3_bucket_server_side_encryption_configuration.site,
-    aws_s3_bucket_versioning.site,
-  ]
 }

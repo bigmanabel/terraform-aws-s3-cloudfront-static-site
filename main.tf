@@ -1,8 +1,8 @@
 module "static_site" {
-  source       = "./modules/s3-static-site"
-  aws_region   = var.aws_region
-  project_name = var.project_name
-  domain_name  = var.domain_name
+  source          = "./modules/s3-static-site"
+  project_name    = var.project_name
+  domain_name     = var.domain_name
+  site_files_path = "${path.root}/build"
 
   providers = {
     aws           = aws

@@ -38,7 +38,8 @@ flowchart LR
 - ACM certificate and Route 53 DNS validation records
 - Route 53 alias record for the custom domain
 - AWS WAF web ACL using the AWS managed Common Rule Set
-- A local sync step that uploads `build/` to the S3 bucket
+- Declarative `aws_s3_object` resources that upload each file from `build/`
+  with content types and cache-control headers
 
 ## Prerequisites
 
@@ -83,9 +84,8 @@ URL, ACM certificate ARN, and WAF ARN.
 
 - CloudFront, WAF, Route 53, and S3 can incur charges. Review the plan and
   current AWS pricing before applying or leaving the stack running.
-- The asset sync runs with `aws s3 sync --delete`; removing a file from
-  `build/` removes its matching object from the deployment bucket on the next
-  apply.
+- Terraform manages the files in `build/` as S3 objects. A `terraform plan`
+  clearly shows every upload, update, and deletion before it reaches the bucket.
 - Terraform state can contain infrastructure details. Keep state in a secured
   remote backend for team or long-lived environments, and never commit local
   state or `terraform.tfvars` files.
